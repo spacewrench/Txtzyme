@@ -49,9 +49,9 @@ int main(void) {
 	LED_CONFIG;
 	LED_ON;
 
-	// normal mode, 2 MHz, count to 2^16 and roll over
+	// normal mode, 16 MHz, count to 2^16 and roll over
 	TCCR1A = 0x00;
-	TCCR1B = 0x02;
+	TCCR1B = _BV(CS10);
 	TCCR1C = 0x00;
 
 	// initialize the USB, and then wait for the host
@@ -141,12 +141,10 @@ uint16_t recv_str(char *buf, uint16_t size) {
 
 uint8_t port = 'd'-'a';
 uint8_t pin = 6;
-uint16_t last = 0;
 uint16_t x = 0;
 
 void parse(const char *buf) {
 	uint16_t count = 0;
-	last = TCNT1;
 	const char *loop = 0;
     uint8_t sreg;
 	char ch;
@@ -183,6 +181,7 @@ void parse(const char *buf) {
 			case 'i':
 				*(uint8_t *)(0x21 + port * 3) &= ~(1 << pin);		// direction = input
 				x = *(uint8_t *)(0x20 + port * 3) & (1 << pin) ? 1 : 0;	// x = pin
+                TCNT1 = 0; TIFR1 = _BV(TOV1);
 				break;
 			case 'o':
 				if (x % 2) {
@@ -191,25 +190,30 @@ void parse(const char *buf) {
 					*(uint8_t *)(0x22 + port * 3) &= ~(1 << pin);	// pin = low
 				}
 				*(uint8_t *)(0x21 + port * 3) |= (1 << pin);		// direction = output
+                TCNT1 = 0; TIFR1 = _BV(TOV1);
 				break;
 			case 'm':
 				for (uint16_t xx = x; xx; --xx) _delay_us( 995 );
-				last = TCNT1;
+				TCNT1 = 0; TIFR1 = _BV(TOV1);
 				break;
 			case 'u':
-				_delay_loop_2(x*(F_CPU/4000000UL));
-			case 'U': {
-				uint16_t now;
-				uint16_t delta = x*2;
-				do { now = TCNT1; } while (now-last < delta);
-				last = now;
+                if ((TIFR1 & _BV(TOV1)) || (x & 0xf000)) {
+                    // Counter1 has overflowed, or (x >= 0x1000)
+                    // Use standard delay_loop tactics -- but note:
+                    // won't work for delays > 0x4000us.
+                    _delay_loop_2( x * (F_CPU/4000000UL) );
+                } else {
+                    // Just wait for Counter1 to get to x * 16
+                    while (TCNT1 < (x << 4)) ;
+                }
+                TCNT1 = 0; TIFR1 = _BV(TOV1);
 				break;
-				}
 			case '{':
 				count = x;
 				loop = buf;
 				while ((ch = *buf++) && ch != '}') {
 				}
+                // FALLS THROUGH!
 			case '}':
 				if (count) {
 					count--;
@@ -261,6 +265,7 @@ void parse(const char *buf) {
 					}
 					x = tcount;
 				}
+                TCNT1 = 0; TIFR1 = _BV(TOV1);
 				break;
 		}
 	}
