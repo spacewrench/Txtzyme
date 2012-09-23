@@ -146,7 +146,10 @@ uint16_t x = 0;
 void parse(const char *buf) {
 	uint16_t count = 0;
 	const char *loop = 0;
-    uint8_t sreg;
+    uint8_t sreg = SREG;
+    volatile uint8_t *pinx = (volatile uint8_t *)(0x20 + port * 3);;
+    volatile uint8_t *ddrx = (volatile uint8_t *)(0x21 + port * 3);;
+    volatile uint8_t *portx = (volatile uint8_t *)(0x22 + port * 3);
 	char ch;
 	while ((ch = *buf++)) {
 		switch (ch) {
@@ -177,19 +180,22 @@ void parse(const char *buf) {
 			case 'f':
 				port = ch - 'a';
 				pin = x % 8;
+                pinx  = (volatile uint8_t *)(0x20 + port * 3);
+                ddrx  = (volatile uint8_t *)(0x21 + port * 3);
+                portx = (volatile uint8_t *)(0x22 + port * 3);
 				break;
 			case 'i':
-				*(uint8_t *)(0x21 + port * 3) &= ~(1 << pin);		// direction = input
-				x = *(uint8_t *)(0x20 + port * 3) & (1 << pin) ? 1 : 0;	// x = pin
+                *ddrx &= ~(1 << pin);
+                x = (*pinx & (1 << pin)) ? 1 : 0;
                 TCNT1 = 0; TIFR1 = _BV(TOV1);
 				break;
 			case 'o':
 				if (x % 2) {
-					*(uint8_t *)(0x22 + port * 3) |= (1 << pin);	// pin = hi
+                    *portx |=  (1 << pin);
 				} else {
-					*(uint8_t *)(0x22 + port * 3) &= ~(1 << pin);	// pin = low
+                    *portx &= ~(1 << pin);
 				}
-				*(uint8_t *)(0x21 + port * 3) |= (1 << pin);		// direction = output
+                *ddrx |= (1 << pin);
                 TCNT1 = 0; TIFR1 = _BV(TOV1);
 				break;
 			case 'm':
@@ -246,7 +252,7 @@ void parse(const char *buf) {
 				send_str(PSTR("\r\n"));
 				break;
 			case 'h':
-				send_str(PSTR("Txtzyme [+bigbuf] " __DATE__ " " __TIME__ "\r\n0-9<num>\tenter number\r\n<num>p\t\tprint number\r\n<num>a-f<pin>\tselect pin\r\n<pin>i<num>\tinput\r\n<pin><num>o\toutput\r\n<num>m\t\tmsec delay\r\n<num>u\t\tusec delay\r\n<num>{}\t\trepeat\r\n[<code>]\texecute <code> with interrupts off\r\nk<num>\t\tloop count\r\n_<words>_\tprint words\r\n<num>s<num>\tanalog sample\r\nv\t\tprint version\r\nh\t\tprint help\r\n<pin>t<num>\tpulse width\r\n"));
+				send_str(PSTR("Txtzyme [+bigbuf] " __DATE__ " " __TIME__ "\r\n0-9<num>\tenter number\r\n<num>p\t\tprint number\r\n<num>a-f<pin>\tselect pin\r\n<pin>i<num>\tinput\r\n<pin><num>o\toutput\r\n<num>m\t\tmsec delay\r\n<num>u\t\tusec delay\r\n<num>{}\t\trepeat\r\n[<code>]\texecute <code> with interrupts off\r\nk<num>\t\tloop count\r\n_<words>_\tprint words\r\n<num>s<num>\tanalog sample\r\nv\t\tprint version\r\n<pin>R<num>\tread OneWire bit\r\n<pin><num>W\twrite OneWire bit\r\nh\t\tprint help\r\n<pin>t<num>\tpulse width\r\n"));
 				break;
 			case 't':
 				*(uint8_t *)(0x21 + port * 3) &= ~(1 << pin);		// direction = input
@@ -267,6 +273,38 @@ void parse(const char *buf) {
 				}
                 TCNT1 = 0; TIFR1 = _BV(TOV1);
 				break;
+            case 'R':	// OneWire Read Bit
+                sreg = SREG;
+                cli( );
+                *portx &= ~(1 << pin);
+                TCNT1 = 0; TIFR1 = _BV(TOV1);
+                *ddrx  |=  (1 << pin);
+                while (TCNT1 < 2 * 16 + 8);	// Delay 2.5us -- start pulse
+                *ddrx  &= ~(1 << pin);		// Release line
+                *pinx   =  (1 << pin);      // Internal pull-up back on
+                while (TCNT1 < 14 * 16) ;
+                x = (*pinx & (1 << pin)) ? 1 : 0; // Sample at 14us
+                SREG = sreg;
+                while (TCNT1 < 120 * 16) ;	// Allow long recovery
+                break;
+            case 'W':	// OneWire Write Bit
+                sreg = SREG;
+                cli( );
+                *portx &= ~(1 << pin);
+                TCNT1 = 0; TIFR1 = _BV(TOV1);
+                *ddrx  |=  (1 << pin);
+                if (x & 1) {
+                    while (TCNT1 < 2 * 16 + 8);	// Delay 2.5us -- start pulse
+                    *pinx = (1 << pin);			// Send data == 1
+                    while (TCNT1 < 60 * 16);	// Finish out bit
+                } else {
+                    while (TCNT1 < 60 * 16) ;	// Hold low for 60us
+                    *pinx = (1 << pin);
+                }
+                SREG = sreg;
+                *ddrx &= ~(1 << pin);           // Back to input
+                while (TCNT1 < 120 * 16) ;		// 60us recovery (only 1us needed)
+                break;
 		}
 	}
 }
