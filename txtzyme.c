@@ -276,12 +276,12 @@ void parse(const char *buf) {
             case 'R':	// OneWire Read Bit
                 sreg = SREG;
                 cli( );
-                *portx &= ~(1 << pin);
+                *portx &= ~(1 << pin);		// Disable port pull-up, ready to pull down
                 TCNT1 = 0; TIFR1 = _BV(TOV1);
-                *ddrx  |=  (1 << pin);
+                *ddrx  |=  (1 << pin);		// set pin to output -- pull down
                 while (TCNT1 < 2 * 16 + 8);	// Delay 2.5us -- start pulse
-                *ddrx  &= ~(1 << pin);		// Release line
-                *pinx   =  (1 << pin);      // Internal pull-up back on
+                *ddrx  &= ~(1 << pin);		// Release line (back to input)
+                *portx |=  (1 << pin);      // Internal pull-up back on
                 while (TCNT1 < 14 * 16) ;
                 x = (*pinx & (1 << pin)) ? 1 : 0; // Sample at 14us
                 SREG = sreg;
@@ -290,20 +290,18 @@ void parse(const char *buf) {
             case 'W':	// OneWire Write Bit
                 sreg = SREG;
                 cli( );
-                *portx &= ~(1 << pin);
+                *portx &= ~(1 << pin);			    // Disable port pull-up, ready to pull down
                 TCNT1 = 0; TIFR1 = _BV(TOV1);
-                *ddrx  |=  (1 << pin);
+                *ddrx  |=  (1 << pin);			    // set pin to output -- pull down
                 if (x & 1) {
-                    while (TCNT1 < 2 * 16 + 8);	// Delay 2.5us -- start pulse
-                    *pinx = (1 << pin);			// Send data == 1
-                    while (TCNT1 < 60 * 16);	// Finish out bit
+                    while (TCNT1 < (2 * 16 + 8)) ;	// Delay 2.5us -- start pulse
                 } else {
-                    while (TCNT1 < 60 * 16) ;	// Hold low for 60us
-                    *pinx = (1 << pin);
+                    while (TCNT1 < (60 * 16)) ;     // Hold low for 60us
                 }
+                *ddrx  &= ~(1 << pin);		        // Release line (back to input)
+                *portx |=  (1 << pin);		        // Internal pull-up back on
                 SREG = sreg;
-                *ddrx &= ~(1 << pin);           // Back to input
-                while (TCNT1 < 120 * 16) ;		// 60us recovery (only 1us needed)
+                while (TCNT1 < (120 * 16)) ;        // 60us recovery (only 1us needed)
                 break;
 		}
 	}
