@@ -186,6 +186,7 @@ void parse(const char *buf) {
 				break;
 			case 'i':
                 *ddrx &= ~(1 << pin);
+			case 'r':
                 x = (*pinx & (1 << pin)) ? 1 : 0;
                 TCNT1 = 0; TIFR1 = _BV(TOV1);
 				break;
@@ -268,7 +269,7 @@ void parse(const char *buf) {
 				send_str(PSTR("\r\n"));
 				break;
 			case 'h':
-				send_str(PSTR("Txtzyme [+bigbuf] " __DATE__ " " __TIME__ "\r\n0-9<num>\tenter number\r\n<num>p\t\tprint number\r\n<num>a-f<pin>\tselect pin\r\n<pin>i<num>\tinput\r\n<pin>I<num>\tinput (pull-up enabled)\r\n<pin>z<num>\tinput (pull-up disabled)\r\n<pin><num>o\toutput\r\n<pin>^\t\ttoggle pin\r\n<num>m\t\tmsec delay\r\n<num>u\t\tusec delay\r\n<num>{}\t\trepeat\r\n[<code>]\texecute <code> with interrupts off\r\nk<num>\t\tloop count\r\n_<words>_\tprint words\r\n<num>s<num>\tanalog sample\r\nv\t\tprint version\r\n<pin>R<num>\tread OneWire bit\r\n<pin><num>W\twrite OneWire bit\r\nh\t\tprint help\r\n<pin>t<num>\tpulse width\r\n"));
+				send_str(PSTR("Txtzyme [+bigbuf] " __DATE__ " " __TIME__ "\r\n0-9<num>\tenter number\r\n<num>p\t\tprint number\r\n<num>a-f<pin>\tselect pin\r\n<pin>i<num>\tinput\r\n<pin>I<num>\tinput (pull-up enabled)\r\n<pin>z<num>\tinput (pull-up disabled)\r\n<pin>r<num>\tread pin (read only -- don't change input state)\r\n<pin><num>o\toutput\r\n<pin>^\t\ttoggle pin\r\n<num>m\t\tmsec delay\r\n<num>u\t\tusec delay\r\n<num>{}\t\trepeat\r\n[<code>]\texecute <code> with interrupts off\r\nk<num>\t\tloop count\r\n_<words>_\tprint words\r\n<num>s<num>\tanalog sample\r\nv\t\tprint version\r\n<pin>R<num>\tread OneWire bit\r\n<pin><num>W\twrite OneWire bit\r\nh\t\tprint help\r\n<pin>t<num>\tpulse width\r\n"));
 				break;
 			case 't':
 				*(uint8_t *)(0x21 + port * 3) &= ~(1 << pin);		// direction = input
